@@ -1,0 +1,22 @@
+{
+    "Results": [
+        {
+            "Bot1": "Patatron",
+            "Bot2": "Patatron",
+            "Winner": "Patatron",
+            "Map": "2000AtmospheresAIE.SC2Map",
+            "Result": "Player1Crash",
+            "GameTime": 19162,
+            "TimeStamp": "01-05-2022 22-55-38UTC"
+        },
+        {
+            "Bot1": "Patatron",
+            "Bot2": "Roubibot",
+            "Winner": "Patatron",
+            "Map": "2000AtmospheresAIE.SC2Map",
+            "Result": "Player1Win",
+            "GameTime": 9763,
+            "TimeStamp": "01-05-2022 23-27-29UTC"
+        }
+    ]
+}
