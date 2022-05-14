@@ -23,4 +23,4 @@ if __name__ == "__main__":
     else:
         # Local game
         print("Starting local game...")
-        run_game(maps.get("2000AtmospheresAIE"), [bot, Computer(Race.Random, Difficulty.VeryHard)], realtime=False)
+        run_game(maps.get("2000AtmospheresAIE"), [bot, Computer(Race.Random, Difficulty.Medium)], realtime=False)

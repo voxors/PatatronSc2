@@ -1,35 +1,28 @@
+from typing import List
+
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.upgrade_id import UpgradeId
+from sc2.position import Point2, Point3
 from sc2.unit import Unit
+
+import macro
 
 
 class CompetitiveBot(BotAI):
     WorkerCountObjective = 80
     ScoutingWorkerTag = None
+    first_push_done = False
+    macro_bot: macro.Macro
 
-    def gas_routine(self, desired_gas: int = 2):
-        exploitable_extractors = self.gas_buildings.filter(lambda unit: unit.has_vespene)
-        if exploitable_extractors.amount + self.already_pending(UnitTypeId.REFINERY) < desired_gas:
-            unexploited_geysers = []
-            for geyser in self.vespene_geyser:
-                for commandcenter in self.townhalls.ready:
-                    if geyser.distance_to(commandcenter) < 10:
-                        unexploited_geysers.append(geyser)
-                        continue
-            if len(unexploited_geysers) > 0:
-                target_geyser = unexploited_geysers[0]
-                if self.can_afford(UnitTypeId.REFINERY):
-                    self.workers.closest_to(target_geyser).build_gas(target_geyser)
-
-    def mule_routine(self):
-        for orbital in self.structures(UnitTypeId.ORBITALCOMMAND):
-            if orbital.energy > 50:
-                orbital(AbilityId.CALLDOWNMULE_CALLDOWNMULE, self.mineral_field.closest_to(orbital))
+    def __init__(self):
+        super().__init__()
+        self.macro_bot = macro.Macro(self)
 
     async def on_start(self):
         print("Game started")
-        # Do things here before the game starts
+        self.macro_bot.main_townhall = self.townhalls.first
 
     async def on_unit_created(self, unit: Unit):
         if unit.type_id == UnitTypeId.SCV:
@@ -43,20 +36,19 @@ class CompetitiveBot(BotAI):
 
     async def on_step(self, iteration):
         await self.distribute_workers()
-        self.gas_routine()
-        self.mule_routine()
-        numberOfBarracks = self.structures(UnitTypeId.BARRACKS).amount + self.already_pending(UnitTypeId.BARRACKS)
+        number_of_barracks = self.structures(UnitTypeId.BARRACKS).amount + self.already_pending(UnitTypeId.BARRACKS)
+        number_of_barracks_tech_lab = self.structures(UnitTypeId.BARRACKSTECHLAB).amount + self.already_pending(UnitTypeId.BARRACKSTECHLAB)
+        marine_needed_for_attack = max(self.supply_cap / 2, 20)
+        if not self.first_push_done:
+            marine_needed_for_attack = 5
 
-        if self.can_afford(UnitTypeId.COMMANDCENTER):
-            position = await self.get_next_expansion()
-            await self.build(UnitTypeId.COMMANDCENTER, position)
-        if self.can_afford(UnitTypeId.BARRACKS) and numberOfBarracks < self.townhalls.amount * 3:
-            await self.build(UnitTypeId.BARRACKS, self.townhalls.first.position.towards(self.game_info.map_center, 7))
-        if self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.supply_left < 3 and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1:
-            await self.build(UnitTypeId.SUPPLYDEPOT, self.townhalls.first.position.towards(self.game_info.map_center, 7))
+        await self.macro_bot.building_routine()
+
         if self.can_afford(UnitTypeId.SCV) and self.supply_workers < self.WorkerCountObjective:
             self.train(UnitTypeId.SCV)
-        if numberOfBarracks > 0 and self.can_afford(UnitTypeId.MARINE):
+        if number_of_barracks_tech_lab > 0 and self.can_afford(UnitTypeId.MARAUDER):
+            self.train(UnitTypeId.MARAUDER)
+        if number_of_barracks > 0 and self.can_afford(UnitTypeId.MARINE):
             self.train(UnitTypeId.MARINE)
 
         if self.enemy_structures.amount == 0 and self.supply_workers > 15:
@@ -65,17 +57,24 @@ class CompetitiveBot(BotAI):
                 for x in range(0, len(self.expansion_locations_list)):
                     self.all_own_units.by_tag(self.ScoutingWorkerTag).move(self.expansion_locations_list[x], True)
 
-        if self.all_own_units.of_type(UnitTypeId.MARINE).amount > 20:
-            for marine in self.all_own_units.of_type(UnitTypeId.MARINE):
-                if self.enemy_units.amount > 0:
+        if self.all_own_units.of_type([UnitTypeId.MARINE, UnitTypeId.MARAUDER]).amount > marine_needed_for_attack or self.supply_cap == 200:
+            for marine in self.all_own_units.of_type([UnitTypeId.MARINE, UnitTypeId.MARAUDER]):
+                if self.enemy_units.amount > 0 and self.enemy_units.first.is_visible:
                     marine.attack(self.enemy_units.first.position)
                 elif self.enemy_structures.amount > 0:
                     marine.attack(self.enemy_structures.first.position)
                 else:
                     marine.attack(self.enemy_start_locations[0])
+            self.first_push_done = True
+        else:
+            for structure in self.structures:
+                for unit in self.enemy_units:
+                    if structure.distance_to(unit) < 20 and unit.is_visible:
+                        for marine in self.all_own_units.of_type([UnitTypeId.MARINE, UnitTypeId.MARAUDER]):
+                            marine.attack(unit.position)
+                        break
 
         pass
 
     def on_end(self, result):
         print("Game ended.")
-        # Do things here after the game ends
